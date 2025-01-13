@@ -71,6 +71,8 @@ import { fileURLToPath } from "url";
 import yargs from "yargs";
 import net from "net";
 
+import { HumanClientInterface } from "@elizaos/client-human-in-loop";
+
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
 
@@ -431,6 +433,12 @@ export async function initializeClients(
         const lensClient = new LensAgentClient(runtime);
         lensClient.start();
         clients.lens = lensClient;
+    }
+
+    if (clientTypes.includes("human")) {
+        const humanClient = new HumanClientInterface(runtime);
+        humanClient.start();
+        clients.human = humanClient;
     }
 
     elizaLogger.log("client keys", Object.keys(clients));
