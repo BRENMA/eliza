@@ -115,9 +115,9 @@ export class MessageManager {
     }
 
     // Main handler for incoming messages
-    public async handleMessage(ctx: Context, content: string): Promise<void> {
+    public async handleMessage(ctx: Context, content: string): Promise<{ id: UUID }> {
         if (!ctx.message || !ctx.from || !content) {
-            return; // Exit if no message or sender info
+            return { id: undefined as unknown as UUID }; // Exit if no message or sender info
         }
 
         if (
@@ -125,14 +125,14 @@ export class MessageManager {
                 ?.shouldIgnoreBotMessages &&
             ctx.from.is_bot
         ) {
-            return;
+            return { id: undefined as unknown as UUID };
         }
         if (
             this.runtime.character.clientConfig?.telegram
                 ?.shouldIgnoreDirectMessages &&
             ctx.chat?.type === "private"
         ) {
-            return;
+            return { id: undefined as unknown as UUID };
         }
 
         const message = ctx.message;
@@ -211,9 +211,14 @@ export class MessageManager {
             );
 
             console.log(sentMessages)
+
+            return {
+                id: stringToUuid(message.message_id.toString() + "-" + this.runtime.agentId),
+            }
         } catch (error) {
             elizaLogger.error("❌ Error handling message:", error);
             elizaLogger.error("Error sending message:", error);
+            return { id: undefined as unknown as UUID };
         }
     }
 }

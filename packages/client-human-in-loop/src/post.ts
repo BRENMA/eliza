@@ -273,66 +273,6 @@ export class TwitterPostClient {
         return true;
     }
 
-    createTweetObject(
-        tweetResult: any,
-        client: any,
-        twitterUsername: string
-    ): Tweet {
-        return {
-            id: tweetResult.rest_id,
-            name: client.profile.screenName,
-            username: client.profile.username,
-            text: tweetResult.legacy.full_text,
-            conversationId: tweetResult.legacy.conversation_id_str,
-            createdAt: tweetResult.legacy.created_at,
-            timestamp: new Date(tweetResult.legacy.created_at).getTime(),
-            userId: client.profile.id,
-            inReplyToStatusId: tweetResult.legacy.in_reply_to_status_id_str,
-            permanentUrl: `https://twitter.com/${twitterUsername}/status/${tweetResult.rest_id}`,
-            hashtags: [],
-            mentions: [],
-            photos: [],
-            thread: [],
-            urls: [],
-            videos: [],
-        } as Tweet;
-    }
-
-    async saveApprovedTweetToQueue(
-        runtime: IAgentRuntime,
-        client: ClientBase,
-        cleanedContent: string,
-        roomId: UUID,
-        newTweetContent: string,
-        twitterUsername: string
-    ) {
-
-        const cacheKey = `twitter/${client.profile.username}/tweetQueue`;
-        let tweetQueue = await runtime.cacheManager.get<PendingTweet[]>(cacheKey);
-
-        elizaLogger.log(`Saving tweet to queue:\n ${tweetQueue}`);
-
-        const newPendingTweet = {
-            cleanedContent,
-            newTweetContent,
-            roomId,
-            twitterUsername,
-            timestamp: Date.now(),
-        };
-
-        if (!tweetQueue) {
-            await runtime.cacheManager.set(
-                cacheKey,
-                [newPendingTweet]
-            )
-        } else {
-            await runtime.cacheManager.set(
-                cacheKey,
-                [...tweetQueue, newPendingTweet]
-            )
-        }
-    }
-
     async removePostedTweetFromQueue(
         client: ClientBase,
         postedTweet: PendingTweet
@@ -350,80 +290,6 @@ export class TwitterPostClient {
         await this.runtime.cacheManager.set(cacheKey, updatedQueue);
 
         elizaLogger.log(`Removed posted tweet from queue. Remaining tweets: ${updatedQueue.length}`);
-    }
-
-    async processAndCacheTweet(
-        runtime: IAgentRuntime,
-        client: ClientBase,
-        tweet: Tweet,
-        roomId: UUID,
-        newTweetContent: string
-    ) {
-        // Cache the last post details
-        await runtime.cacheManager.set(
-            `twitter/${client.profile.username}/lastPost`,
-            {
-                id: tweet.id,
-                timestamp: Date.now(),
-            }
-        );
-
-        // Cache the tweet
-        await client.cacheTweet(tweet);
-
-        // Log the posted tweet
-        elizaLogger.log(`Tweet posted:\n ${tweet.permanentUrl}`);
-
-        // Ensure the room and participant exist
-        await runtime.ensureRoomExists(roomId);
-        await runtime.ensureParticipantInRoom(runtime.agentId, roomId);
-
-        // Create a memory for the tweet
-        await runtime.messageManager.createMemory({
-            id: stringToUuid(tweet.id + "-" + runtime.agentId),
-            userId: runtime.agentId,
-            agentId: runtime.agentId,
-            content: {
-                text: newTweetContent.trim(),
-                url: tweet.permanentUrl,
-                source: "twitter",
-            },
-            roomId,
-            embedding: getEmbeddingZeroVector(),
-            createdAt: tweet.timestamp,
-        });
-    }
-
-    async handleNoteTweet(
-        client: ClientBase,
-        runtime: IAgentRuntime,
-        content: string,
-        tweetId?: string
-    ) {
-        try {
-            const noteTweetResult = await client.requestQueue.add(
-                async () =>
-                    await client.twitterClient.sendNoteTweet(content, tweetId)
-            );
-
-            if (noteTweetResult.errors && noteTweetResult.errors.length > 0) {
-                // Note Tweet failed due to authorization. Falling back to standard Tweet.
-                const truncateContent = truncateToCompleteSentence(
-                    content,
-                    this.client.twitterConfig.MAX_TWEET_LENGTH
-                );
-                return await this.sendStandardTweet(
-                    client,
-                    truncateContent,
-                    tweetId
-                );
-            } else {
-                return noteTweetResult.data.notetweet_create.tweet_results
-                    .result;
-            }
-        } catch (error) {
-            throw new Error(`Note Tweet failed: ${error}`);
-        }
     }
 
     async sendStandardTweet(
@@ -449,6 +315,7 @@ export class TwitterPostClient {
     }
 
     async postTweet(
+        ctx: Context,
         runtime: IAgentRuntime,
         client: ClientBase,
         cleanedContent: string,
@@ -459,31 +326,45 @@ export class TwitterPostClient {
         try {
             elizaLogger.log(`Posting new tweet:\n`);
 
-            let result;
+            const result = await this.messageManager.handleMessage(ctx, cleanedContent);
 
-            if (cleanedContent.length > DEFAULT_MAX_TWEET_LENGTH) {
-                result = await this.handleNoteTweet(
-                    client,
-                    runtime,
-                    cleanedContent
-                );
+            const cacheKey = `twitter/${client.profile.username}/tweetQueue`;
+            let tweetQueue = await runtime.cacheManager.get<PendingTweet[]>(cacheKey);
+
+            elizaLogger.log(`Saving tweet to queue:\n ${tweetQueue}`);
+
+            const newPendingTweet = {
+                cleanedContent,
+                newTweetContent,
+                roomId,
+                twitterUsername,
+                timestamp: Date.now(),
+            };
+
+            if (!tweetQueue) {
+                await runtime.cacheManager.set(
+                    cacheKey,
+                    [newPendingTweet]
+                )
             } else {
-                result = await this.sendStandardTweet(client, cleanedContent);
+                await runtime.cacheManager.set(
+                    cacheKey,
+                    [...tweetQueue, newPendingTweet]
+                )
             }
 
-            const tweet = this.createTweetObject(
-                result,
-                client,
-                twitterUsername
-            );
-
-            await this.processAndCacheTweet(
-                runtime,
-                client,
-                tweet,
+            await runtime.messageManager.createMemory({
+                id: result.id,
+                userId: runtime.agentId,
+                agentId: runtime.agentId,
+                content: {
+                    text: cleanedContent,
+                    source: "telegram",
+                },
                 roomId,
-                newTweetContent
-            );
+                embedding: getEmbeddingZeroVector(),
+                createdAt: Date.now(),
+            });
         } catch (error) {
             elizaLogger.error("Error sending tweet:", error);
         }
@@ -619,7 +500,8 @@ export class TwitterPostClient {
             elizaLogger.log(`Generated tweet for approval:\n ${cleanedContent}`);
 
             if (cleanedContent) {
-                await this.saveApprovedTweetToQueue(
+                await this.postTweet(
+                    ctx,
                     this.runtime,
                     this.client,
                     cleanedContent,
@@ -627,8 +509,6 @@ export class TwitterPostClient {
                     newTweetContent,
                     this.twitterUsername
                 );
-
-                await this.messageManager.handleMessage(ctx, cleanedContent);
 
                 tweetsGenerated++;
                 elizaLogger.log(`Generated tweet ${tweetsGenerated} of ${numberOfTweets} for approval`);
