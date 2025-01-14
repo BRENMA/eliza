@@ -42,36 +42,7 @@ Write a post that is {{adjective}} about {{topic}} (without mentioning {{topic}}
 Your response should be 1, 2, or 3 sentences (choose the length at random).
 Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}. No emojis. Use \\n\\n (double spaces) between statements if there are multiple statements in your response.`;
 
-export const twitterActionTemplate =
-    `
-# INSTRUCTIONS: Determine actions for {{agentName}} (@{{twitterUserName}}) based on:
-{{bio}}
-{{postDirections}}
-
-Guidelines:
-- ONLY engage with content that DIRECTLY relates to character's core interests
-- Direct mentions are priority IF they are on-topic
-- Skip ALL content that is:
-  - Off-topic or tangentially related
-  - From high-profile accounts unless explicitly relevant
-  - Generic/viral content without specific relevance
-  - Political/controversial unless central to character
-  - Promotional/marketing unless directly relevant
-
-Actions (respond only with tags):
-[LIKE] - Perfect topic match AND aligns with character (9.8/10)
-[RETWEET] - Exceptional content that embodies character's expertise (9.5/10)
-[QUOTE] - Can add substantial domain expertise (9.5/10)
-[REPLY] - Can contribute meaningful, expert-level insight (9.5/10)
-
-Tweet:
-{{currentTweet}}
-
-# Respond with qualifying action tags only. Default to NO action unless extremely confident of relevance.` + postActionResponseFooter;
-
 interface PendingTweet {
-    runtime: IAgentRuntime;
-    client: ClientBase;
     cleanedContent: string;
     roomId: UUID;
     newTweetContent: string;
@@ -174,7 +145,7 @@ export class TwitterPostClient {
 
         await this.initializeBot();
         this.setupMessageHandlers();
-        //this.setupShutdownHandlers();
+        this.setupShutdownHandlers();
     }
 
     private async initializeBot(): Promise<void> {
@@ -208,7 +179,6 @@ export class TwitterPostClient {
 
         this.bot.on("message", async (ctx) => {
             try {
-
                 // Check group authorization first
                 if (!(await this.isGroupAuthorized(ctx))) {
                     return;
@@ -220,14 +190,11 @@ export class TwitterPostClient {
                 //    modelClass: ModelClass.SMALL,
                 //});
 
-                const messageText =
-                    "text" in ctx.message
-                        ? ctx.message.text
-                        : "caption" in ctx.message
-                        ? (ctx.message as any).caption
-                        : "";
-
+                const messageText = "text" in ctx.message ? ctx.message.text : "caption" in ctx.message ? (ctx.message as any).caption : "";
                 const numberOfTweetsRequested = Number(messageText);
+
+                elizaLogger.log(`Working on ${messageText} tweets...`);
+
                 if (!isNaN(numberOfTweetsRequested) && numberOfTweetsRequested > 0) {
                     await this.generateTweetsForApproval(ctx, numberOfTweetsRequested);
                 }
@@ -252,6 +219,28 @@ export class TwitterPostClient {
             elizaLogger.error(`❌ Telegram Error for ${ctx.updateType}:`, err);
             ctx.reply("An unexpected error occurred. Please try again later.");
         });
+    }
+
+    private setupShutdownHandlers(): void {
+        const shutdownHandler = async (signal: string) => {
+            elizaLogger.log(
+                `⚠️ Received ${signal}. Shutting down Telegram bot gracefully...`
+            );
+            try {
+                await this.stop();
+                elizaLogger.log("🛑 Telegram bot stopped gracefully");
+            } catch (error) {
+                elizaLogger.error(
+                    "❌ Error during Telegram bot shutdown:",
+                    error
+                );
+                throw error;
+            }
+        };
+
+        process.once("SIGINT", () => shutdownHandler("SIGINT"));
+        process.once("SIGTERM", () => shutdownHandler("SIGTERM"));
+        process.once("SIGHUP", () => shutdownHandler("SIGHUP"));
     }
 
     private async isGroupAuthorized(ctx: Context): Promise<boolean> {
@@ -319,10 +308,11 @@ export class TwitterPostClient {
     ) {
 
         const cacheKey = `twitter/${client.profile.username}/tweetQueue`;
-        const tweetQueue = await runtime.cacheManager.get<PendingTweet[]>(cacheKey) || [];
+        let tweetQueue = await runtime.cacheManager.get<PendingTweet[]>(cacheKey);
+
+        elizaLogger.log(`Saving tweet to queue:\n ${tweetQueue}`);
+
         const newPendingTweet = {
-            runtime,
-            client,
             cleanedContent,
             newTweetContent,
             roomId,
@@ -330,10 +320,17 @@ export class TwitterPostClient {
             timestamp: Date.now(),
         };
 
-        await runtime.cacheManager.set(
-            cacheKey,
-            [...tweetQueue, newPendingTweet]
-        )
+        if (!tweetQueue) {
+            await runtime.cacheManager.set(
+                cacheKey,
+                [newPendingTweet]
+            )
+        } else {
+            await runtime.cacheManager.set(
+                cacheKey,
+                [...tweetQueue, newPendingTweet]
+            )
+        }
     }
 
     async removePostedTweetFromQueue(
@@ -496,7 +493,7 @@ export class TwitterPostClient {
      * Generates a new tweet content. If isDryRun is true, only logs what would have been generated.
      * @returns The generated and cleaned tweet content, or undefined if generation fails
      */
-    private async generateNewTweet(): Promise<{ cleanedContent: string; newTweetContent: string; } | undefined> {
+    private async generateNewTweet() {
         elizaLogger.log("Generating new tweet");
 
         try {
@@ -534,7 +531,7 @@ export class TwitterPostClient {
                     twitterPostTemplate,
             });
 
-            elizaLogger.debug("generate post prompt:\n" + context);
+            elizaLogger.log("generate post prompt:\n" + context);
 
             const newTweetContent = await generateText({
                 runtime: this.runtime,
@@ -591,6 +588,7 @@ export class TwitterPostClient {
 
             // Final cleaning
             cleanedContent = removeQuotes(fixNewLines(cleanedContent));
+            elizaLogger.log(`Generated tweet:\n ${cleanedContent}`);
 
             if (this.isDryRun) {
                 elizaLogger.info(
@@ -618,6 +616,8 @@ export class TwitterPostClient {
 
         while (tweetsGenerated < numberOfTweets) {
             const {cleanedContent, newTweetContent} = await this.generateNewTweet();
+            elizaLogger.log(`Generated tweet for approval:\n ${cleanedContent}`);
+
             if (cleanedContent) {
                 await this.saveApprovedTweetToQueue(
                     this.runtime,

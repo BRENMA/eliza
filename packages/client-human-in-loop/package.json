@@ -21,6 +21,8 @@
     "dependencies": {
         "@elizaos/core": "workspace:*",
         "agent-twitter-client": "0.0.18",
+        "@telegraf/types": "7.1.0",
+        "telegraf": "4.16.3",
         "glob": "11.0.0",
         "zod": "3.23.8"
     },

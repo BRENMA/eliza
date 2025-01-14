@@ -435,10 +435,11 @@ export async function initializeClients(
         clients.lens = lensClient;
     }
 
-    if (clientTypes.includes("human")) {
-        const humanClient = new HumanClientInterface(runtime);
-        humanClient.start();
-        clients.human = humanClient;
+    if (clientTypes.includes(Clients.HUMAN)) {
+        const humanClient = await HumanClientInterface.start(runtime);
+        if (humanClient) {
+            clients.human = humanClient;
+        }
     }
 
     elizaLogger.log("client keys", Object.keys(clients));

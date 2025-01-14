@@ -116,7 +116,7 @@ export class MessageManager {
 
     // Main handler for incoming messages
     public async handleMessage(ctx: Context, content: string): Promise<void> {
-        if (!ctx.message || !ctx.from) {
+        if (!ctx.message || !ctx.from || !content) {
             return; // Exit if no message or sender info
         }
 
@@ -177,9 +177,6 @@ export class MessageManager {
                 ctx.chat?.id.toString() + "-" + this.runtime.agentId
             ) as UUID;
 
-            // Get agent ID
-            const agentId = this.runtime.agentId;
-
             // Get room ID
             const roomId = chatId;
 
@@ -192,27 +189,9 @@ export class MessageManager {
                 "telegram"
             );
 
-            // Get message ID
-            const messageId = stringToUuid( message.message_id.toString() + "-" + this.runtime.agentId ) as UUID;
-
-            // Get text or caption
-            let messageText = "";
-            if ("text" in message) {
-                messageText = message.text;
-            } else if ("caption" in message && message.caption) {
-                messageText = message.caption;
-            }
-
-            // Combine text and image description
-            const fullText = messageText;
-
-            if (!fullText) {
-                return; // Skip if no content
-            }
-
             // Create content
-            const content: Content = {
-                text: fullText,
+            const fullContent: Content = {
+                text: content,
                 source: "telegram",
                 inReplyTo:
                     "reply_to_message" in message && message.reply_to_message
@@ -227,7 +206,7 @@ export class MessageManager {
             // Send response in chunks
             const sentMessages = await this.sendMessageInChunks(
                 ctx,
-                content,
+                fullContent,
                 message.message_id
             );
 

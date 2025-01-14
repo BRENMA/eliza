@@ -123,6 +123,9 @@ importers:
       '@elizaos/client-farcaster':
         specifier: workspace:*
         version: link:../packages/client-farcaster
+      '@elizaos/client-human-in-loop':
+        specifier: workspace:*
+        version: link:../packages/client-human-in-loop
       '@elizaos/client-lens':
         specifier: workspace:*
         version: link:../packages/client-lens
@@ -667,12 +670,18 @@ importers:
       '@elizaos/core':
         specifier: workspace:*
         version: link:../core
+      '@telegraf/types':
+        specifier: 7.1.0
+        version: 7.1.0
       agent-twitter-client:
         specifier: 0.0.18
         version: 0.0.18(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       glob:
         specifier: 11.0.0
         version: 11.0.0
+      telegraf:
+        specifier: 4.16.3
+        version: 4.16.3(encoding@0.1.13)
       whatwg-url:
         specifier: 7.1.0
         version: 7.1.0

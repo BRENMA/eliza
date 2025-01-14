@@ -741,7 +741,6 @@ export class ClientBase extends EventEmitter {
         try {
             const profile = await this.requestQueue.add(async () => {
                 const profile = await this.twitterClient.getProfile(username);
-                // console.log({ profile });
                 return {
                     id: profile.userId,
                     username,
