@@ -21,6 +21,8 @@ import { DEFAULT_MAX_TWEET_LENGTH } from "./environment.ts";
 import { Context, Telegraf } from "telegraf";
 import { MessageManager } from "./messageManager.ts";
 import { message } from "telegraf/filters";
+import * as fs from 'fs';
+import * as path from 'path';
 
 const twitterPostTemplate = `
 # Areas of Expertise
@@ -40,7 +42,9 @@ const twitterPostTemplate = `
 # Task: Generate a post in the voice and style and perspective of {{agentName}} @{{twitterUserName}}.
 Write a post that is {{adjective}} about {{topic}} (without mentioning {{topic}} directly), from the perspective of {{agentName}}. Do not add commentary or acknowledge this request, just write the post.
 Your response should be 1, 2, or 3 sentences (choose the length at random).
-Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}. No emojis. Use \\n\\n (double spaces) between statements if there are multiple statements in your response.`;
+Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}. No emojis. Use \\n\\n (double spaces) between statements if there are multiple statements in your response.
+Your response must be about the following text:
+{{fileContent}}`;
 
 interface PendingTweet {
     cleanedContent: string;
@@ -184,19 +188,66 @@ export class TwitterPostClient {
                     return;
                 }
 
-                //const numberOfTweetsRequested = await generateText({
-                //    runtime: this.runtime,
-                //    prompt: "how many tweets does this message request",
-                //    modelClass: ModelClass.SMALL,
-                //});
+                if ('document' in ctx.message && ctx.message.document?.file_name) {
+                    elizaLogger.log('📎 Received document message:', ctx.message.document.file_name);
 
-                const messageText = "text" in ctx.message ? ctx.message.text : "caption" in ctx.message ? (ctx.message as any).caption : "";
-                const numberOfTweetsRequested = Number(messageText);
+                    try {
+                        const fileName = ctx.message.document.file_name.toLowerCase();
 
-                elizaLogger.log(`Working on ${messageText} tweets...`);
+                        if (!fileName.endsWith('.txt')) {
+                            await ctx.reply('Sorry, I can only process TXT files.');
+                            return;
+                        }
 
-                if (!isNaN(numberOfTweetsRequested) && numberOfTweetsRequested > 0) {
-                    await this.generateTweetsForApproval(ctx, numberOfTweetsRequested);
+                        const file = await ctx.telegram.getFile(ctx.message.document.file_id);
+                        const filePath = file.file_path;
+                        if (!filePath) {
+                            throw new Error('Could not get file path');
+                        }
+
+                        const botToken = this.runtime.getSetting("TELEGRAM_BOT_TOKEN");
+                        const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+                        const response = await fetch(fileUrl);
+
+                        if (!response.ok) {
+                            throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+                        }
+
+                        const buffer = Buffer.from(await response.arrayBuffer());
+                        const fileContent = buffer.toString('utf-8');
+
+                        if (!fileContent.trim()) {
+                            await ctx.reply('The file appears to be empty.');
+                            return;
+                        }
+
+                        elizaLogger.log('📄 Successfully extracted text from file', fileContent);
+                        // Now fileContent contains the text from the TXT file
+                        // You can process it further here
+
+                        await this.generateTweetsForApproval(ctx, 1, fileContent);
+
+                    } catch (error) {
+                        elizaLogger.error('❌ Error processing file:', error);
+                        await ctx.reply('Sorry, I encountered an error while processing your file.');
+                        return;
+                    }
+                } else {
+
+                    //const numberOfTweetsRequested = await generateText({
+                    //    runtime: this.runtime,
+                    //    prompt: "how many tweets does this message request",
+                    //    modelClass: ModelClass.SMALL,
+                    //});
+
+                    const messageText = "text" in ctx.message ? ctx.message.text : "caption" in ctx.message ? (ctx.message as any).caption : "";
+                    const numberOfTweetsRequested = Number(messageText);
+
+                    elizaLogger.log(`Working on ${messageText} tweets...`);
+
+                    if (!isNaN(numberOfTweetsRequested) && numberOfTweetsRequested > 0) {
+                        await this.generateTweetsForApproval(ctx, numberOfTweetsRequested);
+                    }
                 }
             } catch (error) {
                 elizaLogger.error("❌ Error handling message:", error);
@@ -214,6 +265,13 @@ export class TwitterPostClient {
                 }
             }
         });
+
+        //this.bot.on("document", async (ctx) => {
+        //    elizaLogger.log(
+        //        "📎 Received document message:",
+        //        ctx.message.document.file_name
+        //    );
+        //});
 
         this.bot.catch((err, ctx) => {
             elizaLogger.error(`❌ Telegram Error for ${ctx.updateType}:`, err);
@@ -374,7 +432,7 @@ export class TwitterPostClient {
      * Generates a new tweet content. If isDryRun is true, only logs what would have been generated.
      * @returns The generated and cleaned tweet content, or undefined if generation fails
      */
-    private async generateNewTweet() {
+    private async generateNewTweet(optionalFileContext?: string) {
         elizaLogger.log("Generating new tweet");
 
         try {
@@ -402,14 +460,13 @@ export class TwitterPostClient {
                 },
                 {
                     twitterUserName: this.client.profile.username,
+                    fileContent: optionalFileContext,
                 }
             );
 
             const context = composeContext({
                 state,
-                template:
-                    this.runtime.character.templates?.twitterPostTemplate ||
-                    twitterPostTemplate,
+                template: twitterPostTemplate //this.runtime.character.templates?.twitterPostTemplate || twitterPostTemplate,
             });
 
             elizaLogger.log("generate post prompt:\n" + context);
@@ -492,11 +549,11 @@ export class TwitterPostClient {
         }
     }
 
-    private async generateTweetsForApproval(ctx: Context, numberOfTweets: number) {
+    private async generateTweetsForApproval(ctx: Context, numberOfTweets: number, optionalFileContext?: string) {
         let tweetsGenerated = 0;
 
         while (tweetsGenerated < numberOfTweets) {
-            const {cleanedContent, newTweetContent} = await this.generateNewTweet();
+            const {cleanedContent, newTweetContent} = await this.generateNewTweet(optionalFileContext);
             elizaLogger.log(`Generated tweet for approval:\n ${cleanedContent}`);
 
             if (cleanedContent) {
