@@ -88,7 +88,7 @@ function truncateToCompleteSentence(
     return hardTruncated + "...";
 }
 
-export class TwitterPostClient {
+export class HumanPostClient {
     client: ClientBase;
     runtime: IAgentRuntime;
     twitterUsername: string;
@@ -96,6 +96,7 @@ export class TwitterPostClient {
     private lastProcessTime: number = 0;
     private stopProcessingActions: boolean = false;
     private isDryRun: boolean;
+
     // telegram
     private bot: Telegraf<Context>;
     private messageManager: MessageManager;
