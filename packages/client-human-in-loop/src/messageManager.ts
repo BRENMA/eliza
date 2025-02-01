@@ -108,12 +108,6 @@ export class MessageManager {
         return sentMessages;
     }
 
-    private extractTweetCount(text: string): number | undefined {
-        // Match patterns like "generate 5 tweets" or "5 tweets"
-        const match = text.toLowerCase().match(/(\d+)\s*tweets?/);
-        return match ? parseInt(match[1]) : undefined;
-    }
-
     // Main handler for incoming messages
     public async handleMessage(ctx: Context, content: string): Promise<{ id: UUID }> {
         if (!ctx.message || !ctx.from || !content) {

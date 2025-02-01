@@ -10,53 +10,90 @@ import {
 } from "@elizaos/core";
 import { elizaLogger } from "@elizaos/core";
 import { ClientBase } from "./base.ts";
-import { postActionResponseFooter } from "@elizaos/core";
-import { generateTweetActions } from "@elizaos/core";
-import { IImageDescriptionService, ServiceType } from "@elizaos/core";
-import { buildConversationThread } from "./utils.ts";
-import { twitterMessageHandlerTemplate } from "./interactions.ts";
-import { DEFAULT_MAX_TWEET_LENGTH } from "./environment.ts";
 
 // telegram imports
 import { Context, Telegraf } from "telegraf";
 import { MessageManager } from "./messageManager.ts";
 import { message } from "telegraf/filters";
-import * as fs from 'fs';
-import * as path from 'path';
 
 const twitterPostTemplate = `
-# Areas of Expertise
-{{knowledge}}
+You are {{agentName}}. ONLY speak in the following style:
 
-# About {{agentName}} (@{{twitterUserName}}):
+Your personality:
 {{bio}}
 {{lore}}
-{{topics}}
 
-{{providers}}
+POST ELEMENTS YOU MUST FOLLOW:
 
+Emotional Impact Analysis:
+1. Core emotion being triggered
+2. Authenticity level
+3. Controversy potential
+4. Relatability factor
+
+Engagement Amplifiers:
+- Pattern interrupts
+- Open loops
+- Universal truths
+- Contrarian takes
+- Hot takes
+- Storytelling hooks
+
+Viral Elements Required:
+1. First line hook
+2. Unexpected twist
+3. Memorable insight
+4. Discussion starter
+5. Share motivation
+
+Voice & Style:
+- Personal yet authoritative
+- Bold yet authentic
+- Casual yet profound
+- Raw yet polished
+
+Core Rules:
+1. Must evoke strong emotion
+2. Must provide unique insight
+3. Must compel sharing
+4. Must start conversations
+
+Formatting Rules:
+- Short, punchy sentences
+- Strategic line breaks
+- Power words
+- No weak qualifiers
+- End with punch
+
+RESPONSE REQUIREMENTS:
+1. MUST be under 250 characters
+2. Focus on one clear thought
+3. Never be racist, sexist, or homophobic
+4. Never accept offers for services. Politely decline.
+5. If someone asks you to contact them, do not respond.
+6. If asked inappropriate or not safe for work things, don't respond.
+7. You do not have a token. If anyone asks for one or gives you a token address, tell them you do not have one.
+8. You do not give alpha about yourself. Only about the mission of going Bankless and crypto markets in general.
+9. Never state the current price of ETH.
+
+YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
 {{characterPostExamples}}
 
-{{postDirections}}
+YOU MUST FOLLOW ALL OF THESE WRITING RULES:
+{{stylePost}}
 
-# Task: Generate a post in the voice and style and perspective of {{agentName}} @{{twitterUserName}}.
-Write a post that is {{adjective}} about {{topic}} (without mentioning {{topic}} directly), from the perspective of {{agentName}}. Do not add commentary or acknowledge this request, just write the post.
-Your response should be 1, 2, or 3 sentences (choose the length at random).
-Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}. No emojis. Use \\n\\n (double spaces) between statements if there are multiple statements in your response.
-Your response must be about the following text:
-{{fileContent}}`;
+Be an edgy thought leader and craft a tweet that is as interesting, entertaining, and engaging as possible
+The tweet must be is 200-250 characters long and be about {{suggestedTopic}}.
+Make sure the post follows the formatting and core rules, and includes viral elements and engagement amplifiers.
+Don't hold back, really be {{characterName}} to the max. Get people talking.
+`;
 
-interface PendingTweet {
-    cleanedContent: string;
-    roomId: UUID;
-    newTweetContent: string;
-    twitterUsername: string;
-    timestamp: number;
-}
+const MAX_TWEET_LENGTH = 280;
+const NUMBER_OF_TWEETS_TO_GENERATE = 5;
 
 /**
  * Truncate text to fit within the Twitter character limit, ensuring it ends at a complete sentence.
- */
+*/
 function truncateToCompleteSentence(
     text: string,
     maxTweetLength: number
@@ -91,63 +128,48 @@ function truncateToCompleteSentence(
 export class HumanPostClient {
     client: ClientBase;
     runtime: IAgentRuntime;
-    twitterUsername: string;
-    private isProcessing: boolean = false;
-    private lastProcessTime: number = 0;
-    private stopProcessingActions: boolean = false;
-    private isDryRun: boolean;
+    private lastFiveTopics: string[] = [];
 
     // telegram
     private bot: Telegraf<Context>;
     private messageManager: MessageManager;
 
-    constructor(client: ClientBase, runtime: IAgentRuntime, botToken: string) {
-        this.client = client;
+    constructor(runtime: IAgentRuntime, botToken: string) {
         this.runtime = runtime;
-        this.twitterUsername = this.client.twitterConfig.TWITTER_USERNAME;
-        this.isDryRun = this.client.twitterConfig.TWITTER_DRY_RUN;
-
-        // Log configuration on initialization
-        elizaLogger.log("Twitter Client Configuration:");
-        elizaLogger.log(`- Username: ${this.twitterUsername}`);
-        elizaLogger.log(`- Dry Run Mode: ${this.isDryRun ? "enabled" : "disabled"}`);
-        elizaLogger.log(
-            `- Post Interval: ${this.client.twitterConfig.POST_INTERVAL_MIN}-${this.client.twitterConfig.POST_INTERVAL_MAX} minutes`
-        );
-        elizaLogger.log(
-            `- Action Processing: ${this.client.twitterConfig.ENABLE_ACTION_PROCESSING ? "enabled" : "disabled"}`
-        );
-        elizaLogger.log(
-            `- Action Interval: ${this.client.twitterConfig.ACTION_INTERVAL} minutes`
-        );
-        elizaLogger.log(
-            `- Post Immediately: ${this.client.twitterConfig.POST_IMMEDIATELY ? "enabled" : "disabled"}`
-        );
-        elizaLogger.log(
-            `- Search Enabled: ${this.client.twitterConfig.TWITTER_SEARCH_ENABLE ? "enabled" : "disabled"}`
-        );
-
-        const targetUsers = this.client.twitterConfig.TWITTER_TARGET_USERS;
-        if (targetUsers) {
-            elizaLogger.log(`- Target Users: ${targetUsers}`);
-        }
-
-        if (this.isDryRun) {
-            elizaLogger.log(
-                "Twitter client initialized in dry run mode - no actual tweets should be posted"
-            );
-        }
-
+ 
         // telegram setup
         this.bot = new Telegraf(botToken);
         this.messageManager = new MessageManager(this.bot, this.runtime);
     }
 
-    async start() {
-        if (!this.client.profile) {
-            await this.client.init();
-        }
+    private readonly themeAnalysisPrompt = `
+        Analyze this interview I did:
+        {{content}}
 
+        Identify the top 5 themes or topics being discussed.
+        Return only the themes, one per line.
+    `;
+
+    private readonly topicSelectionPrompt = `
+        These themes are trending among my followers:
+        {{themes}}
+
+        My last five topics were:
+        {{lastFiveTopics}}
+
+        Select ONE topic that would be most engaging to tweet about.
+        Consider:
+        1. Current relevance
+        2. Potential for engagement
+        3. Alignment with my expertise
+        4. Must be semantically different from last five topics
+        5. Connection to {{characterName}}'s interests
+
+        IMPORTANT: Return ONLY the selected topic as a single line, without any explanation.
+        Example response: "DeFi innovation"
+    `;
+
+    async start() {
         await this.initializeBot();
         this.setupMessageHandlers();
         this.setupShutdownHandlers();
@@ -223,10 +245,11 @@ export class HumanPostClient {
                         }
 
                         elizaLogger.log('📄 Successfully extracted text from file', fileContent);
+                        
                         // Now fileContent contains the text from the TXT file
                         // You can process it further here
 
-                        await this.generateTweetsForApproval(ctx, 1, fileContent);
+                        await this.generateTweetsForApproval(ctx, NUMBER_OF_TWEETS_TO_GENERATE, fileContent);
 
                     } catch (error) {
                         elizaLogger.error('❌ Error processing file:', error);
@@ -234,21 +257,7 @@ export class HumanPostClient {
                         return;
                     }
                 } else {
-
-                    //const numberOfTweetsRequested = await generateText({
-                    //    runtime: this.runtime,
-                    //    prompt: "how many tweets does this message request",
-                    //    modelClass: ModelClass.SMALL,
-                    //});
-
-                    const messageText = "text" in ctx.message ? ctx.message.text : "caption" in ctx.message ? (ctx.message as any).caption : "";
-                    const numberOfTweetsRequested = Number(messageText);
-
-                    elizaLogger.log(`Working on ${messageText} tweets...`);
-
-                    if (!isNaN(numberOfTweetsRequested) && numberOfTweetsRequested > 0) {
-                        await this.generateTweetsForApproval(ctx, numberOfTweetsRequested);
-                    }
+                    elizaLogger.log(`no document in message`)
                 }
             } catch (error) {
                 elizaLogger.error("❌ Error handling message:", error);
@@ -266,13 +275,6 @@ export class HumanPostClient {
                 }
             }
         });
-
-        //this.bot.on("document", async (ctx) => {
-        //    elizaLogger.log(
-        //        "📎 Received document message:",
-        //        ctx.message.document.file_name
-        //    );
-        //});
 
         this.bot.catch((err, ctx) => {
             elizaLogger.error(`❌ Telegram Error for ${ctx.updateType}:`, err);
@@ -332,85 +334,16 @@ export class HumanPostClient {
         return true;
     }
 
-    async removePostedTweetFromQueue(
-        client: ClientBase,
-        postedTweet: PendingTweet
-    ) {
-        const cacheKey = `twitter/${client.profile.username}/tweetQueue`;
-        const tweetQueue = await this.runtime.cacheManager.get<PendingTweet[]>(cacheKey) || [];
-
-        // Remove the posted tweet from the queue
-        const updatedQueue = tweetQueue.filter(tweet =>
-            tweet.timestamp !== postedTweet.timestamp ||
-            tweet.newTweetContent !== postedTweet.newTweetContent
-        );
-
-        // Update the cache with the filtered queue
-        await this.runtime.cacheManager.set(cacheKey, updatedQueue);
-
-        elizaLogger.log(`Removed posted tweet from queue. Remaining tweets: ${updatedQueue.length}`);
-    }
-
-    async sendStandardTweet(
-        client: ClientBase,
-        content: string,
-        tweetId?: string
-    ) {
-        try {
-            const standardTweetResult = await client.requestQueue.add(
-                async () =>
-                    await client.twitterClient.sendTweet(content, tweetId)
-            );
-            const body = await standardTweetResult.json();
-            if (!body?.data?.create_tweet?.tweet_results?.result) {
-                console.error("Error sending tweet; Bad response:", body);
-                return;
-            }
-            return body.data.create_tweet.tweet_results.result;
-        } catch (error) {
-            elizaLogger.error("Error sending standard Tweet:", error);
-            throw error;
-        }
-    }
-
     async postTweet(
         ctx: Context,
         runtime: IAgentRuntime,
-        client: ClientBase,
         cleanedContent: string,
         roomId: UUID,
-        newTweetContent: string,
-        twitterUsername: string
     ) {
         try {
             elizaLogger.log(`Posting new tweet:\n`);
 
             const result = await this.messageManager.handleMessage(ctx, cleanedContent);
-
-            const cacheKey = `twitter/${client.profile.username}/tweetQueue`;
-            let tweetQueue = await runtime.cacheManager.get<PendingTweet[]>(cacheKey);
-
-            elizaLogger.log(`Saving tweet to queue:\n ${tweetQueue}`);
-
-            const newPendingTweet = {
-                cleanedContent,
-                newTweetContent,
-                roomId,
-                twitterUsername,
-                timestamp: Date.now(),
-            };
-
-            if (!tweetQueue) {
-                await runtime.cacheManager.set(
-                    cacheKey,
-                    [newPendingTweet]
-                )
-            } else {
-                await runtime.cacheManager.set(
-                    cacheKey,
-                    [...tweetQueue, newPendingTweet]
-                )
-            }
 
             await runtime.messageManager.createMemory({
                 id: result.id,
@@ -424,30 +357,108 @@ export class HumanPostClient {
                 embedding: getEmbeddingZeroVector(),
                 createdAt: Date.now(),
             });
+
         } catch (error) {
             elizaLogger.error("Error sending tweet:", error);
         }
     }
 
-    /**
-     * Generates a new tweet content. If isDryRun is true, only logs what would have been generated.
-     * @returns The generated and cleaned tweet content, or undefined if generation fails
-     */
-    private async generateNewTweet(optionalFileContext?: string) {
-        elizaLogger.log("Generating new tweet");
+    private async analyzeInterviewDocument(content: string): Promise<string[]> {
+        try {
+            elizaLogger.info(`[ContentAnalyzer] Analyzing document for themes`);
+
+            const context = this.themeAnalysisPrompt.replace(
+                "{{content}}",
+                content
+            );
+
+            elizaLogger.info("[ContentAnalyzer] Analyzing interview for themes");
+            const response = await generateText({
+                runtime: this.runtime,
+                context,
+                modelClass: "medium",
+            });
+
+            const themes = response
+                .split("\n")
+                .filter((theme) => theme.trim().length > 0);
+            elizaLogger.info(
+                `[ContentAnalyzer] Identified ${themes.length} themes. \n Themes: ${themes.join(
+                    ", "
+                )}`
+            );
+            return themes;
+        } catch (error) {
+            elizaLogger.error(
+                "[ContentAnalyzer] Error analyzing document:",
+                error
+            );
+            throw error;
+        }
+    }
+
+    private async extractTopic(themes: string): Promise<string | null> {
+        if (!this.runtime) {
+            return null;
+        }
+
+        try {
+            elizaLogger.info(
+                "Current topic history:",
+                this.lastFiveTopics
+            );
+
+            const lastTopics =
+                this.lastFiveTopics.length > 0
+                    ? this.lastFiveTopics.join("\n")
+                    : "No previous topics";
+
+            const context = this.topicSelectionPrompt
+                .replace("{{themes}}", themes)
+                .replace("{{lastFiveTopics}}", lastTopics)
+                .replace(/{{characterName}}/g, this.runtime.character.name);
+
+            elizaLogger.info("Selecting topic");
+            const response = await generateText({
+                runtime: this.runtime,
+                context,
+                modelClass: "medium",
+            });
+
+            // Extract just the topic, removing any explanation
+            const selectedTopic = response.split("\n")[0].trim();
+
+            elizaLogger.info(`Selected topic: "${selectedTopic}"`);
+            elizaLogger.info("Previous topics:", this.lastFiveTopics);
+
+            // Update lastFiveTopics and save to cache
+            this.lastFiveTopics.push(selectedTopic);
+            if (this.lastFiveTopics.length > 5) {
+                this.lastFiveTopics.shift();
+            }
+
+            elizaLogger.info(
+                "Updated topic history:",
+                this.lastFiveTopics
+            );
+            return selectedTopic;
+        } catch (error) {
+            elizaLogger.error(
+                "Error extracting topic:",
+                error
+            );
+            return null;
+        }
+    }
+   
+    private async generateNewTweet(topic: string) {
+        elizaLogger.log(`Generating tweet for topic: "${topic}"`);
 
         try {
             const roomId = stringToUuid(
-                "twitter_generate_room-" + this.client.profile.username
+                "twitter_generate_room-40IQ"
             );
-            await this.runtime.ensureUserExists(
-                this.runtime.agentId,
-                this.client.profile.username,
-                this.runtime.character.name,
-                "twitter"
-            );
-
-            const topics = this.runtime.character.topics.join(", ");
+            elizaLogger.info(`Room ID: ${roomId}`);
 
             const state = await this.runtime.composeState(
                 {
@@ -455,19 +466,21 @@ export class HumanPostClient {
                     roomId: roomId,
                     agentId: this.runtime.agentId,
                     content: {
-                        text: topics || "",
-                        action: "TWEET",
+                        text: topic,
+                        action: "",
                     },
                 },
                 {
-                    twitterUserName: this.client.profile.username,
-                    fileContent: optionalFileContext,
+                    twitterUserName: '40IQ',
+                    suggestedTopic: topic,
                 }
             );
 
+            elizaLogger.info(`Composed state:\n${state}`);
+
             const context = composeContext({
                 state,
-                template: twitterPostTemplate //this.runtime.character.templates?.twitterPostTemplate || twitterPostTemplate,
+                template: twitterPostTemplate,
             });
 
             elizaLogger.log("generate post prompt:\n" + context);
@@ -512,7 +525,7 @@ export class HumanPostClient {
             }
 
             // Truncate the content to the maximum tweet length specified in the environment settings, ensuring the truncation respects sentence boundaries.
-            const maxTweetLength = this.client.twitterConfig.MAX_TWEET_LENGTH
+            const maxTweetLength = MAX_TWEET_LENGTH;
             if (maxTweetLength) {
                 cleanedContent = truncateToCompleteSentence(
                     cleanedContent,
@@ -529,17 +542,6 @@ export class HumanPostClient {
             cleanedContent = removeQuotes(fixNewLines(cleanedContent));
             elizaLogger.log(`Generated tweet:\n ${cleanedContent}`);
 
-            if (this.isDryRun) {
-                elizaLogger.info(
-                    `Dry run: would have posted tweet: ${cleanedContent}`
-                );
-
-                return {
-                    cleanedContent: cleanedContent,
-                    newTweetContent: newTweetContent,
-                };
-            }
-
             return {
                 cleanedContent: cleanedContent,
                 newTweetContent: newTweetContent,
@@ -550,22 +552,25 @@ export class HumanPostClient {
         }
     }
 
-    private async generateTweetsForApproval(ctx: Context, numberOfTweets: number, optionalFileContext?: string) {
+    private async generateTweetsForApproval(ctx: Context, numberOfTweets: number, fileContext: string) {
         let tweetsGenerated = 0;
 
+        const themes = await this.analyzeInterviewDocument(fileContext);
+
         while (tweetsGenerated < numberOfTweets) {
-            const {cleanedContent, newTweetContent} = await this.generateNewTweet(optionalFileContext);
+
+            const topic = await this.extractTopic(themes.join("\n"));
+            elizaLogger.log(`Selected topic: ${topic}`);
+
+            const {cleanedContent, newTweetContent} = await this.generateNewTweet(topic);
             elizaLogger.log(`Generated tweet for approval:\n ${cleanedContent}`);
 
             if (cleanedContent) {
                 await this.postTweet(
                     ctx,
                     this.runtime,
-                    this.client,
                     cleanedContent,
-                    stringToUuid("twitter_generate_room-" + this.client.profile.username),
-                    newTweetContent,
-                    this.twitterUsername
+                    stringToUuid("twitter_generate_room-40IQ"),
                 );
 
                 tweetsGenerated++;
@@ -575,54 +580,9 @@ export class HumanPostClient {
         elizaLogger.log(`Completed generating ${numberOfTweets} tweets for approval`);
     }
 
-    private async scheduleTweetsPosting(numberOfTweets: number) {
-        let tweetsPosted = 0;
-
-        const postNextTweet = async () => {
-            if (tweetsPosted >= numberOfTweets) {
-                elizaLogger.log(`Completed posting ${numberOfTweets} tweets`);
-                return;
-            }
-
-            const lastPost = await this.runtime.cacheManager.get<{
-                timestamp: number;
-            }>("twitter/" + this.twitterUsername + "/lastPost");
-
-            const lastPostTimestamp = lastPost?.timestamp ?? 0;
-            const minMinutes = this.client.twitterConfig.POST_INTERVAL_MIN;
-            const maxMinutes = this.client.twitterConfig.POST_INTERVAL_MAX;
-            const randomMinutes =
-                Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) +
-                minMinutes;
-            const delay = randomMinutes * 60 * 1000;
-
-            if (Date.now() > lastPostTimestamp + delay) {
-                // Here you would implement the actual posting of the approved tweet
-                //await this.postTweet(
-                //    this.runtime,
-                //    this.client,
-                //    cleanedContent,
-                //    stringToUuid("twitter_generate_room-" + this.client.profile.username),
-                //    newTweetContent,
-                //    this.twitterUsername
-                //);
-
-                tweetsPosted++;
-                elizaLogger.log(`Posted tweet ${tweetsPosted} of ${numberOfTweets}`);
-            }
-
-            if (tweetsPosted < numberOfTweets) {
-                setTimeout(() => {
-                    postNextTweet();
-                }, delay);
-                elizaLogger.log(`Next tweet (${tweetsPosted + 1}/${numberOfTweets}) scheduled in ${randomMinutes} minutes`);
-            }
-        };
-
-        postNextTweet();
-    }
-
     async stop() {
-        this.stopProcessingActions = true;
+        elizaLogger.log("Stopping Telegram bot...");
+        await this.bot.stop();
+        elizaLogger.log("Telegram bot stopped");
     }
 }
