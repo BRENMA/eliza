@@ -1,4 +1,3 @@
-import { Tweet } from "agent-twitter-client";
 import {
     composeContext,
     generateText,
@@ -9,14 +8,13 @@ import {
     UUID,
 } from "@elizaos/core";
 import { elizaLogger } from "@elizaos/core";
-import { ClientBase } from "./base.ts";
 
 // telegram imports
 import { Context, Telegraf } from "telegraf";
 import { MessageManager } from "./messageManager.ts";
 import { message } from "telegraf/filters";
 
-const twitterPostTemplate = `
+const twitterPostTemplateShortForm = `
 You are {{agentName}}. ONLY speak in the following style:
 
 Your personality:
@@ -66,15 +64,10 @@ Formatting Rules:
 - End with punch
 
 RESPONSE REQUIREMENTS:
-1. MUST be under 250 characters
+1. MUST be under {{tweetLength}} characters
 2. Focus on one clear thought
 3. Never be racist, sexist, or homophobic
-4. Never accept offers for services. Politely decline.
-5. If someone asks you to contact them, do not respond.
-6. If asked inappropriate or not safe for work things, don't respond.
-7. You do not have a token. If anyone asks for one or gives you a token address, tell them you do not have one.
-8. You do not give alpha about yourself. Only about the mission of going Bankless and crypto markets in general.
-9. Never state the current price of ETH.
+ 
 
 YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
 {{characterPostExamples}}
@@ -82,51 +75,47 @@ YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
 YOU MUST FOLLOW ALL OF THESE WRITING RULES:
 {{stylePost}}
 
-Be an edgy thought leader and craft a tweet that is as interesting, entertaining, and engaging as possible
-The tweet must be is 200-250 characters long and be about {{suggestedTopic}}.
-Make sure the post follows the formatting and core rules, and includes viral elements and engagement amplifiers.
+Be a thought leader and craft a post that is as interesting, entertaining, and engaging as possible
+The post must be a bit under {{tweetLength}} characters long and be about {{suggestedTopic}}.
+Make sure the post follows the formatting and core rules.
 Don't hold back, really be {{characterName}} to the max. Get people talking.
 `;
 
-const MAX_TWEET_LENGTH = 280;
-const NUMBER_OF_TWEETS_TO_GENERATE = 5;
+const twitterPostTemplateLongForm = `
+YOUR MISSION: Create a comprehensive long-form Twitter thread.
 
-/**
- * Truncate text to fit within the Twitter character limit, ensuring it ends at a complete sentence.
-*/
-function truncateToCompleteSentence(
-    text: string,
-    maxTweetLength: number
-): string {
-    if (text.length <= maxTweetLength) {
-        return text;
-    }
+You are {{agentName}}. ONLY speak in the following style:
 
-    // Attempt to truncate at the last period within the limit
-    const lastPeriodIndex = text.lastIndexOf(".", maxTweetLength - 1);
-    if (lastPeriodIndex !== -1) {
-        const truncatedAtPeriod = text.slice(0, lastPeriodIndex + 1).trim();
-        if (truncatedAtPeriod.length > 0) {
-            return truncatedAtPeriod;
-        }
-    }
+Your personality:
+{{bio}}
+{{lore}}
 
-    // If no period, truncate to the nearest whitespace within the limit
-    const lastSpaceIndex = text.lastIndexOf(" ", maxTweetLength - 1);
-    if (lastSpaceIndex !== -1) {
-        const truncatedAtSpace = text.slice(0, lastSpaceIndex).trim();
-        if (truncatedAtSpace.length > 0) {
-            return truncatedAtSpace + "...";
-        }
-    }
+You must create a comprehensive long-form Twitter thread that is as interesting, entertaining, and engaging as possible. The thread must be a bit under {{tweetLength}} characters long and be about {{suggestedTopic}}.
 
-    // Fallback: Hard truncate and add ellipsis
-    const hardTruncated = text.slice(0, maxTweetLength - 3).trim();
-    return hardTruncated + "...";
-}
+Make sure the thread follows the formatting and core rules.
+
+RESPONSE REQUIREMENTS:
+1. MUST be under {{tweetLength}} characters
+2. Focus on one clear thought
+3. Never be racist, sexist, or homophobic
+4. Do NOT use section headers or labels - write naturally
+5. Never number points or steps
+
+YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
+{{characterPostExamples}}
+
+YOU MUST FOLLOW ALL OF THESE WRITING RULES:
+{{stylePost}}
+
+Be a thought leader and craft a comprehensive long-form Twitter thread that is as interesting, entertaining, and engaging as possible.
+The thread must be a bit under {{tweetLength}} characters long and be about {{suggestedTopic}}.
+Make sure the thread follows the formatting and core rules.
+Don't hold back, really be {{characterName}} to the max. Get people talking.
+`;
+
+const NUMBER_OF_TWEETS_TO_GENERATE = 3;
 
 export class HumanPostClient {
-    client: ClientBase;
     runtime: IAgentRuntime;
     private lastFiveTopics: string[] = [];
 
@@ -245,10 +234,7 @@ export class HumanPostClient {
                         }
 
                         elizaLogger.log('📄 Successfully extracted text from file', fileContent);
-                        
-                        // Now fileContent contains the text from the TXT file
-                        // You can process it further here
-
+     
                         await this.generateTweetsForApproval(ctx, NUMBER_OF_TWEETS_TO_GENERATE, fileContent);
 
                     } catch (error) {
@@ -471,12 +457,17 @@ export class HumanPostClient {
                     },
                 },
                 {
-                    twitterUserName: '40IQ',
                     suggestedTopic: topic,
                 }
             );
 
             elizaLogger.info(`Composed state:\n${state}`);
+
+            const allowedTweetLenghts = ["140", "250", "2000"];
+            const randomTweetLength = Math.floor(Math.random() * allowedTweetLenghts.length);
+            const twitterPostTemplate = allowedTweetLenghts[randomTweetLength] === "2000" 
+              ? twitterPostTemplateLongForm.replace("{{tweetLength}}", allowedTweetLenghts[randomTweetLength]) 
+              : twitterPostTemplateShortForm.replace("{{tweetLength}}", allowedTweetLenghts[randomTweetLength]);
 
             const context = composeContext({
                 state,
@@ -525,13 +516,13 @@ export class HumanPostClient {
             }
 
             // Truncate the content to the maximum tweet length specified in the environment settings, ensuring the truncation respects sentence boundaries.
-            const maxTweetLength = MAX_TWEET_LENGTH;
-            if (maxTweetLength) {
-                cleanedContent = truncateToCompleteSentence(
-                    cleanedContent,
-                    maxTweetLength
-                );
-            }
+            // const maxTweetLength = MAX_TWEET_LENGTH;
+            // if (maxTweetLength) {
+            //     cleanedContent = truncateToCompleteSentence(
+            //         cleanedContent,
+            //         maxTweetLength
+            //     );
+            // }
 
             const removeQuotes = (str: string) =>
                 str.replace(/^['"](.*)['"]$/, "$1");
