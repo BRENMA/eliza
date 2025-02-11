@@ -670,6 +670,12 @@ importers:
       '@elizaos/core':
         specifier: workspace:*
         version: link:../core
+      '@langchain/core':
+        specifier: ^0.3.39
+        version: 0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      '@langchain/openai':
+        specifier: ^0.4.3
+        version: 0.4.3(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(encoding@0.1.13)
       '@telegraf/types':
         specifier: 7.1.0
         version: 7.1.0
@@ -679,6 +685,9 @@ importers:
       glob:
         specifier: 11.0.0
         version: 11.0.0
+      langchain:
+        specifier: 0.3.6
+        version: 0.3.6(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(axios@1.7.9)(encoding@0.1.13)(handlebars@4.7.8)(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
       telegraf:
         specifier: 4.16.3
         version: 4.16.3(encoding@0.1.13)
@@ -5115,11 +5124,21 @@ packages:
     resolution: {integrity: sha512-jtJKbJWB1NPU1YvtrExOB2rumvUFgkJwlWGxyjSIV9A6zcLVmUbcZGV8fCSuXgl5bbzOIQLJ1xcLYQmbW9TkTg==}
     engines: {node: '>=18'}
 
+  '@langchain/core@0.3.39':
+    resolution: {integrity: sha512-muXs4asy1A7qDtcdznxqyBfxf4N6qxofY/S0c95vbsWa0r9YAE2PttHIjcuxSy1q2jUiTkpCcgFEjNJRQRVhEw==}
+    engines: {node: '>=18'}
+
   '@langchain/openai@0.3.16':
     resolution: {integrity: sha512-Om9HRlTeI0Ou6D4pfxbWHop4WGfkCdV/7v1W/+Jr7NSf0BNoA9jk5GqGms8ZtOYSGgPvizDu3i0TrM3B4cN4NA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@langchain/core': '>=0.2.26 <0.4.0'
+
+  '@langchain/openai@0.4.3':
+    resolution: {integrity: sha512-QPtkhzJElChagIybWTHZ0IRf2cwyjg9AhbJovYiPjOOmkwRBBEbfsA3YKr97JEKUQzKvMq/rcAZRvGvGEFGeLQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': '>=0.3.39 <0.4.0'
 
   '@langchain/textsplitters@0.1.0':
     resolution: {integrity: sha512-djI4uw9rlkAb5iMhtLED+xJebDdAG935AdP4eRTB02R7OB/act55Bj9wsskhZsvuyQRpO4O1wQOp85s6T6GWmw==}
@@ -19638,7 +19657,7 @@ snapshots:
   '@acuminous/bitsyntax@0.1.2':
     dependencies:
       buffer-more-ints: 1.0.0
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       safe-buffer: 5.1.2
     transitivePeerDependencies:
       - supports-color
@@ -21571,7 +21590,7 @@ snapshots:
     dependencies:
       '@scure/bip32': 1.6.1
       abitype: 1.0.8(typescript@5.6.3)(zod@3.23.8)
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       axios-mock-adapter: 1.22.0(axios@1.7.9)
       axios-retry: 4.5.0(axios@1.7.9)
       bip32: 4.0.0
@@ -23356,7 +23375,7 @@ snapshots:
   '@eslint/config-array@0.19.1':
     dependencies:
       '@eslint/object-schema': 2.1.5
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       minimatch: 3.1.2
     transitivePeerDependencies:
       - supports-color
@@ -23382,7 +23401,7 @@ snapshots:
   '@eslint/eslintrc@3.2.0':
     dependencies:
       ajv: 6.12.6
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       espree: 10.3.0
       globals: 14.0.0
       ignore: 5.3.2
@@ -24442,6 +24461,23 @@ snapshots:
     transitivePeerDependencies:
       - openai
 
+  '@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))':
+    dependencies:
+      '@cfworker/json-schema': 4.0.3
+      ansi-styles: 5.2.0
+      camelcase: 6.3.0
+      decamelize: 1.2.0
+      js-tiktoken: 1.0.15
+      langsmith: 0.2.14(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      mustache: 4.2.0
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      uuid: 10.0.0
+      zod: 3.23.8
+      zod-to-json-schema: 3.24.1(zod@3.23.8)
+    transitivePeerDependencies:
+      - openai
+
   '@langchain/openai@0.3.16(@langchain/core@0.3.27(openai@4.73.0(encoding@0.1.13)(zod@3.23.8)))(encoding@0.1.13)':
     dependencies:
       '@langchain/core': 0.3.27(openai@4.73.0(encoding@0.1.13)(zod@3.23.8))
@@ -24452,9 +24488,34 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@langchain/openai@0.3.16(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(encoding@0.1.13)':
+    dependencies:
+      '@langchain/core': 0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      js-tiktoken: 1.0.15
+      openai: 4.77.0(encoding@0.1.13)(zod@3.23.8)
+      zod: 3.23.8
+      zod-to-json-schema: 3.24.1(zod@3.23.8)
+    transitivePeerDependencies:
+      - encoding
+
+  '@langchain/openai@0.4.3(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(encoding@0.1.13)':
+    dependencies:
+      '@langchain/core': 0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      js-tiktoken: 1.0.15
+      openai: 4.77.0(encoding@0.1.13)(zod@3.23.8)
+      zod: 3.23.8
+      zod-to-json-schema: 3.24.1(zod@3.23.8)
+    transitivePeerDependencies:
+      - encoding
+
   '@langchain/textsplitters@0.1.0(@langchain/core@0.3.27(openai@4.73.0(encoding@0.1.13)(zod@3.23.8)))':
     dependencies:
       '@langchain/core': 0.3.27(openai@4.73.0(encoding@0.1.13)(zod@3.23.8))
+      js-tiktoken: 1.0.15
+
+  '@langchain/textsplitters@0.1.0(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))':
+    dependencies:
+      '@langchain/core': 0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
       js-tiktoken: 1.0.15
 
   '@leichtgewicht/ip-codec@2.0.5': {}
@@ -28796,7 +28857,7 @@ snapshots:
       '@typescript-eslint/types': 8.16.0
       '@typescript-eslint/typescript-estree': 8.16.0(typescript@5.6.3)
       '@typescript-eslint/visitor-keys': 8.16.0
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       eslint: 9.16.0(jiti@2.4.2)
     optionalDependencies:
       typescript: 5.6.3
@@ -28829,7 +28890,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/typescript-estree': 8.16.0(typescript@5.6.3)
       '@typescript-eslint/utils': 8.16.0(eslint@9.16.0(jiti@2.4.2))(typescript@5.6.3)
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       eslint: 9.16.0(jiti@2.4.2)
       ts-api-utils: 1.4.3(typescript@5.6.3)
     optionalDependencies:
@@ -28860,7 +28921,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.16.0
       '@typescript-eslint/visitor-keys': 8.16.0
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       fast-glob: 3.3.2
       is-glob: 4.0.3
       minimatch: 9.0.5
@@ -29650,7 +29711,7 @@ snapshots:
 
   agent-base@6.0.2:
     dependencies:
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
     transitivePeerDependencies:
       - supports-color
 
@@ -30042,13 +30103,13 @@ snapshots:
 
   axios-mock-adapter@1.22.0(axios@1.7.9):
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       fast-deep-equal: 3.1.3
       is-buffer: 2.0.5
 
   axios-retry@4.5.0(axios@1.7.9):
     dependencies:
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       is-retry-allowed: 2.2.0
 
   axios@0.21.4:
@@ -30059,7 +30120,7 @@ snapshots:
 
   axios@0.27.2:
     dependencies:
-      follow-redirects: 1.15.9(debug@4.4.0)
+      follow-redirects: 1.15.9
       form-data: 4.0.1
     transitivePeerDependencies:
       - debug
@@ -30083,6 +30144,14 @@ snapshots:
   axios@1.7.8:
     dependencies:
       follow-redirects: 1.15.9(debug@4.4.0)
+      form-data: 4.0.1
+      proxy-from-env: 1.1.0
+    transitivePeerDependencies:
+      - debug
+
+  axios@1.7.9:
+    dependencies:
+      follow-redirects: 1.15.9
       form-data: 4.0.1
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
@@ -32123,6 +32192,10 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
+  debug@4.4.0:
+    dependencies:
+      ms: 2.1.3
+
   debug@4.4.0(supports-color@5.5.0):
     dependencies:
       ms: 2.1.3
@@ -33025,7 +33098,7 @@ snapshots:
       ajv: 6.12.6
       chalk: 4.1.2
       cross-spawn: 7.0.6
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       escape-string-regexp: 4.0.0
       eslint-scope: 8.2.0
       eslint-visitor-keys: 4.2.0
@@ -33610,6 +33683,8 @@ snapshots:
     dependencies:
       async: 0.2.10
       which: 1.3.1
+
+  follow-redirects@1.15.9: {}
 
   follow-redirects@1.15.9(debug@4.3.7):
     optionalDependencies:
@@ -34695,7 +34770,7 @@ snapshots:
   http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.3
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
     transitivePeerDependencies:
       - supports-color
 
@@ -34751,14 +34826,14 @@ snapshots:
   https-proxy-agent@5.0.1:
     dependencies:
       agent-base: 6.0.2
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
     transitivePeerDependencies:
       - supports-color
 
   https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.3
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
     transitivePeerDependencies:
       - supports-color
 
@@ -36236,6 +36311,28 @@ snapshots:
       - encoding
       - openai
 
+  langchain@0.3.6(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(axios@1.7.9)(encoding@0.1.13)(handlebars@4.7.8)(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)):
+    dependencies:
+      '@langchain/core': 0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      '@langchain/openai': 0.3.16(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))(encoding@0.1.13)
+      '@langchain/textsplitters': 0.1.0(@langchain/core@0.3.39(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)))
+      js-tiktoken: 1.0.15
+      js-yaml: 4.1.0
+      jsonpointer: 5.0.1
+      langsmith: 0.2.14(openai@4.77.0(encoding@0.1.13)(zod@3.23.8))
+      openapi-types: 12.1.3
+      p-retry: 4.6.2
+      uuid: 10.0.0
+      yaml: 2.7.0
+      zod: 3.23.8
+      zod-to-json-schema: 3.24.1(zod@3.23.8)
+    optionalDependencies:
+      axios: 1.7.9
+      handlebars: 4.7.8
+    transitivePeerDependencies:
+      - encoding
+      - openai
+
   langium@3.0.0:
     dependencies:
       chevrotain: 11.0.3
@@ -36254,6 +36351,17 @@ snapshots:
       uuid: 10.0.0
     optionalDependencies:
       openai: 4.73.0(encoding@0.1.13)(zod@3.23.8)
+
+  langsmith@0.2.14(openai@4.77.0(encoding@0.1.13)(zod@3.23.8)):
+    dependencies:
+      '@types/uuid': 10.0.0
+      commander: 10.0.1
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      semver: 7.6.3
+      uuid: 10.0.0
+    optionalDependencies:
+      openai: 4.77.0(encoding@0.1.13)(zod@3.23.8)
 
   latest-version@7.0.0:
     dependencies:
@@ -38077,7 +38185,7 @@ snapshots:
       '@yarnpkg/lockfile': 1.1.0
       '@yarnpkg/parsers': 3.0.0-rc.46
       '@zkochan/js-yaml': 0.0.7
-      axios: 1.7.9(debug@4.4.0)
+      axios: 1.7.9
       chalk: 4.1.0
       cli-cursor: 3.1.0
       cli-spinners: 2.6.1
@@ -41141,7 +41249,7 @@ snapshots:
   socks-proxy-agent@8.0.5:
     dependencies:
       agent-base: 7.1.3
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       socks: 2.8.3
     transitivePeerDependencies:
       - supports-color
@@ -41711,7 +41819,7 @@ snapshots:
     dependencies:
       '@telegraf/types': 7.1.0
       abort-controller: 3.0.0
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       mri: 1.2.0
       node-fetch: 2.7.0(encoding@0.1.13)
       p-timeout: 4.1.0
@@ -42116,7 +42224,7 @@ snapshots:
       cac: 6.7.14
       chokidar: 4.0.3
       consola: 3.3.3
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       esbuild: 0.24.2
       joycon: 3.1.1
       picocolors: 1.1.1
@@ -42151,7 +42259,7 @@ snapshots:
   tuf-js@2.2.1:
     dependencies:
       '@tufjs/models': 2.0.1
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       make-fetch-happen: 13.0.1
     transitivePeerDependencies:
       - supports-color
@@ -42832,7 +42940,7 @@ snapshots:
   vite-node@2.1.5(@types/node@22.10.4)(terser@5.37.0):
     dependencies:
       cac: 6.7.14
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       es-module-lexer: 1.6.0
       pathe: 1.1.2
       vite: 5.4.11(@types/node@22.10.4)(terser@5.37.0)
@@ -42945,7 +43053,7 @@ snapshots:
       '@vitest/spy': 2.1.5
       '@vitest/utils': 2.1.5
       chai: 5.1.2
-      debug: 4.4.0(supports-color@8.1.1)
+      debug: 4.4.0
       expect-type: 1.1.0
       magic-string: 0.30.17
       pathe: 1.1.2

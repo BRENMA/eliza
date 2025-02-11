@@ -8,6 +8,9 @@ import {
     UUID,
 } from "@elizaos/core";
 import { elizaLogger } from "@elizaos/core";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import type { Document } from "@langchain/core/documents";
 
 // telegram imports
 import { Context, Telegraf } from "telegraf";
@@ -67,13 +70,12 @@ RESPONSE REQUIREMENTS:
 1. MUST be under {{tweetLength}} characters
 2. Focus on one clear thought
 3. Never be racist, sexist, or homophobic
- 
 
 YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
 {{characterPostExamples}}
 
-YOU MUST FOLLOW ALL OF THESE WRITING RULES:
-{{stylePost}}
+USE THE FOLLOWING INFORMATION IN YOUR RESPONSE:
+{{contextFromVectorStore}}
 
 Be a thought leader and craft a post that is as interesting, entertaining, and engaging as possible
 The post must be a bit under {{tweetLength}} characters long and be about {{suggestedTopic}}.
@@ -104,8 +106,8 @@ RESPONSE REQUIREMENTS:
 YOUR RESPONSE MUST BE CONSISTENT WITH THE TONE AND STYLE OF YOUR MEMORIES
 {{characterPostExamples}}
 
-YOU MUST FOLLOW ALL OF THESE WRITING RULES:
-{{stylePost}}
+USE THE FOLLOWING INFORMATION IN YOUR RESPONSE:
+{{contextFromVectorStore}}
 
 Be a thought leader and craft a comprehensive long-form Twitter thread that is as interesting, entertaining, and engaging as possible.
 The thread must be a bit under {{tweetLength}} characters long and be about {{suggestedTopic}}.
@@ -113,11 +115,12 @@ Make sure the thread follows the formatting and core rules.
 Don't hold back, really be {{characterName}} to the max. Get people talking.
 `;
 
-const NUMBER_OF_TWEETS_TO_GENERATE = 3;
+const NUMBER_OF_TWEETS_TO_GENERATE = 10;
 
 export class HumanPostClient {
     runtime: IAgentRuntime;
     private lastFiveTopics: string[] = [];
+    private vectorStore: MemoryVectorStore;
 
     // telegram
     private bot: Telegraf<Context>;
@@ -125,7 +128,23 @@ export class HumanPostClient {
 
     constructor(runtime: IAgentRuntime, botToken: string) {
         this.runtime = runtime;
- 
+
+        try {
+            const openAIApiKey = this.runtime.getSetting("OPENAI_API_KEY") || process.env.OPENAI_API_KEY;
+            if (!openAIApiKey) {
+                throw new Error("OPENAI_API_KEY is not set in runtime settings");
+            }
+
+            const embeddings = new OpenAIEmbeddings({
+                model: "text-embedding-3-small",
+                apiKey: openAIApiKey,
+            });
+            this.vectorStore = new MemoryVectorStore(embeddings);
+        } catch (error) {
+            elizaLogger.error("Failed to initialize vector store:", error);
+            throw error;
+        }
+
         // telegram setup
         this.bot = new Telegraf(botToken);
         this.messageManager = new MessageManager(this.bot, this.runtime);
@@ -234,7 +253,25 @@ export class HumanPostClient {
                         }
 
                         elizaLogger.log('📄 Successfully extracted text from file', fileContent);
-     
+
+                        const document: Document = {
+                            pageContent: fileContent,
+                            metadata: {
+                                source: 'file',
+                                timestamp: Date.now()
+                            }
+                        }
+                        try {
+                            await this.vectorStore.addDocuments([document]);
+                            elizaLogger.log('📄 Successfully added text to vector store', fileContent);
+                        } catch (error) {
+                            elizaLogger.error('Failed to add document to vector store:', error);
+                            await ctx.reply('Error: Unable to process the file content. Please check your OpenAI API key and quota.');
+                            return;
+                        }
+
+                        elizaLogger.log('📄 Successfully added text to vector store', fileContent);
+
                         await this.generateTweetsForApproval(ctx, NUMBER_OF_TWEETS_TO_GENERATE, fileContent);
 
                     } catch (error) {
@@ -436,7 +473,7 @@ export class HumanPostClient {
             return null;
         }
     }
-   
+
     private async generateNewTweet(topic: string) {
         elizaLogger.log(`Generating tweet for topic: "${topic}"`);
 
@@ -463,15 +500,32 @@ export class HumanPostClient {
 
             elizaLogger.info(`Composed state:\n${state}`);
 
-            const allowedTweetLenghts = ["140", "250", "2000"];
+            const allowedTweetLenghts = ["140", "250", "1000"];
             const randomTweetLength = Math.floor(Math.random() * allowedTweetLenghts.length);
             const twitterPostTemplate = allowedTweetLenghts[randomTweetLength] === "2000" 
               ? twitterPostTemplateLongForm.replace("{{tweetLength}}", allowedTweetLenghts[randomTweetLength]) 
               : twitterPostTemplateShortForm.replace("{{tweetLength}}", allowedTweetLenghts[randomTweetLength]);
 
+            elizaLogger.log('🔍 Performing vector store similarity search for topic:', topic);
+            const similaritySearchResults = await this.vectorStore.similaritySearch(
+                topic,
+                3
+            );
+            elizaLogger.log('📊 Vector store search results:', {
+                topic,
+                numberOfResults: similaritySearchResults.length,
+                results: similaritySearchResults.map(result => ({
+                    content: result.pageContent.substring(0, 100) + '...',  // First 100 chars for brevity
+                    score: result.metadata.score,
+                    metadata: result.metadata
+                }))
+            });
+
+            const finalTwitterPostTemplate = twitterPostTemplate.replace("{{contextFromVectorStore}}", similaritySearchResults.map((result) => result.pageContent).join("\n"));
+
             const context = composeContext({
                 state,
-                template: twitterPostTemplate,
+                template: finalTwitterPostTemplate,
             });
 
             elizaLogger.log("generate post prompt:\n" + context);
@@ -533,10 +587,7 @@ export class HumanPostClient {
             cleanedContent = removeQuotes(fixNewLines(cleanedContent));
             elizaLogger.log(`Generated tweet:\n ${cleanedContent}`);
 
-            return {
-                cleanedContent: cleanedContent,
-                newTweetContent: newTweetContent,
-            };
+            return cleanedContent;
         } catch (error) {
             elizaLogger.error("Error generating new tweet:", error);
             return undefined;
@@ -553,7 +604,7 @@ export class HumanPostClient {
             const topic = await this.extractTopic(themes.join("\n"));
             elizaLogger.log(`Selected topic: ${topic}`);
 
-            const {cleanedContent, newTweetContent} = await this.generateNewTweet(topic);
+            const cleanedContent = await this.generateNewTweet(topic);
             elizaLogger.log(`Generated tweet for approval:\n ${cleanedContent}`);
 
             if (cleanedContent) {
@@ -568,6 +619,14 @@ export class HumanPostClient {
                 elizaLogger.log(`Generated tweet ${tweetsGenerated} of ${numberOfTweets} for approval`);
             }
         }
+
+        // Clear the vector store after all tweets are generated
+        const embeddings = new OpenAIEmbeddings({
+            model: "text-embedding-3-small",
+            apiKey: this.runtime.getSetting("OPENAI_API_KEY") || process.env.OPENAI_API_KEY,
+        });
+        this.vectorStore = new MemoryVectorStore(embeddings);
+        elizaLogger.log('Vector store cleared after generating all tweets');
         elizaLogger.log(`Completed generating ${numberOfTweets} tweets for approval`);
     }
 
